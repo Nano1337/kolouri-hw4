@@ -87,33 +87,52 @@ for epoch in tqdm(range(num_epochs), desc="Training Epochs"):
     avg_epoch_loss = epoch_loss / len(dataloader)
     logging.info(f"Epoch {epoch+1}/{num_epochs}, Average Loss: {avg_epoch_loss:.4f}")
 
-# Forward Processing Noising Logic
-# TODO: implement this plotting
-
-
-# Reverse Process Inference
+# Make plots
 batch_size = 10000
-fig, axs = plt.subplots(1, 7, figsize=(20, 4))  # Prepare subplots
-plot_intervals = np.linspace(1, T, 7, dtype=int)  # Determine intervals for plotting
+fig = plt.figure(figsize=(20, 8), constrained_layout=True)
 
-with torch.no_grad():
-    x = torch.randn((batch_size, 2), device=device)  # Initial noise for batch
-    for i, t in enumerate(tqdm(reversed(range(1, T+1)), desc="Inference Steps")):
-        z = torch.randn_like(x) if t > 1 else torch.zeros_like(x)
-        alpha_t = alpha[t-1]
-        alpha_bar_t = alpha_bar[t-1]
-        sigma_t = torch.sqrt((1 - alpha_bar_t) / (1 - alpha_bar[t-2]) * beta[t-1]) if t > 1 else torch.sqrt(beta[t-1])
+# Create 2x1 subfigures
+subfigs = fig.subfigures(nrows=2, ncols=1)
+titles = ["Forward Process", "Reverse Process"]
+plot_intervals = np.linspace(1, T, 7, dtype=int)
+intervals = [0, 50, 100, 150, 200, 250, 500]
 
-        predicted_noise = model(x, torch.full((batch_size,), t-1, device=device))
-        x = 1 / torch.sqrt(alpha_t) * (x - (1 - alpha_t) / torch.sqrt(1 - alpha_bar_t) * predicted_noise) + sigma_t * z
+for row, subfig in enumerate(subfigs):
+    subfig.suptitle(titles[row], fontweight='bold')
+    axs = subfig.subplots(1, 7)  # Create 1x7 grid of axes in each subfigure
 
-        if t in plot_intervals:
-            # Calculate the index for axs in reverse order
-            ax_idx = len(plot_intervals) - np.where(plot_intervals == t)[0][0] - 1
-            axs[ax_idx].scatter(x[:, 0].cpu(), x[:, 1].cpu(), s=1)
-            axs[ax_idx].set_xlim([-10, 10])
-            axs[ax_idx].set_ylim([-10, 10])
-            axs[ax_idx].set_title(f"t={t}")
+    if row == 0:  # Forward Process
+        with torch.no_grad():
+            x0 = data.to(device)
+            for t in tqdm(plot_intervals, desc="Forward Noising Steps"):
+                noise = torch.randn_like(x0)
+                alpha_bar_t = alpha_bar[t-1].unsqueeze(-1)
+                sqrt_alpha_bar_t = torch.sqrt(alpha_bar_t)
+                sqrt_one_minus_alpha_bar_t = torch.sqrt(1 - alpha_bar_t)
+                xt = sqrt_alpha_bar_t * x0 + sqrt_one_minus_alpha_bar_t * noise
 
-plt.suptitle("Reverse Process", fontweight='bold')
+                ax_idx = np.where(plot_intervals == t)[0][0]
+                axs[ax_idx].scatter(xt[:, 0].cpu(), xt[:, 1].cpu(), s=2)
+                axs[ax_idx].set_xlim([-10, 10])
+                axs[ax_idx].set_ylim([-10, 10])
+                axs[ax_idx].set_title(f"t={intervals[ax_idx]}")
+    else:  # Reverse Process Inference
+        with torch.no_grad():
+            x = torch.randn((batch_size, 2), device=device)
+            for i, t in enumerate(tqdm(reversed(range(1, T+1)), desc="Inference Steps")):
+                z = torch.randn_like(x) if t > 1 else torch.zeros_like(x)
+                alpha_t = alpha[t-1]
+                alpha_bar_t = alpha_bar[t-1]
+                sigma_t = torch.sqrt((1 - alpha_bar_t) / (1 - alpha_bar[t-2]) * beta[t-1]) if t > 1 else torch.sqrt(beta[t-1])
+
+                predicted_noise = model(x, torch.full((batch_size,), t-1, device=device))
+                x = 1 / torch.sqrt(alpha_t) * (x - (1 - alpha_t) / torch.sqrt(1 - alpha_bar_t) * predicted_noise) + sigma_t * z
+
+                if t in plot_intervals:
+                    ax_idx = len(plot_intervals) - np.where(plot_intervals == t)[0][0] - 1
+                    axs[ax_idx].scatter(x[:, 0].cpu(), x[:, 1].cpu(), s=1)
+                    axs[ax_idx].set_xlim([-10, 10])
+                    axs[ax_idx].set_ylim([-10, 10])
+                    axs[ax_idx].set_title(f"t={intervals[ax_idx]}")
+
 plt.savefig("prob2.png")
