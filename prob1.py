@@ -146,7 +146,7 @@ if __name__ == "__main__":
     fig,ax=plt.subplots(1,2,figsize=(10,5))
     ax[0].scatter(z[:,0],z[:,1])
     ax[0].set_title("Network's input")
-    ax[1].scatter(xhat[:,0],xhat[:,1])
+    ax[1].scatter(xhat[:,0],xhat[:,1], s=2)
     ax[1].set_title("Network's output")
     plt.savefig("prob1_2.png")
 
